@@ -36,7 +36,7 @@ void add_tail(int newclisockfd, char* addr)
 	} else {
 		tail->next = (USR*) malloc(sizeof(USR));
 		tail->next->clisockfd = newclisockfd;
-        tail->ipaddr = addr;
+        tail->next->ipaddr = addr;
 		tail->next->next = NULL;
 		tail = tail->next;
 	}

@@ -86,6 +86,7 @@ void broadcast(int fromfd, char* message)
 			char buffer[512];
 
 			// prepare message
+            memset(buffer, 0, 256);
 			sprintf(buffer, "[%s]:%s", inet_ntoa(cliaddr.sin_addr), message);
 			int nmsg = strlen(buffer);
 
@@ -118,14 +119,14 @@ void* thread_main(void* args)
 
 	nrcv = recv(clisockfd, buffer, 255, 0);
 	if (nrcv < 0) error("ERROR recv() failed");
-    printf("message received\n");
 	while (nrcv > 0) {
 		// we send the message to everyone except the sender
 		broadcast(clisockfd, buffer);
 
+        memset(buffer, 0, 256);
 		nrcv = recv(clisockfd, buffer, 255, 0);
 		if (nrcv < 0) error("ERROR recv() failed");
-        if(buffer[0] == '\0') break;
+        //if(buffer[0] == '\0') break;
 	}
 
     if(deleteClient(clisockfd) == 0) {

@@ -32,14 +32,13 @@ void* thread_main_recv(void* args)
 	char buffer[512];
 	int n;
 
-	n = recv(sockfd, buffer, 512, 0);
-	while (n > 0) {
+	do {
 		memset(buffer, 0, 512);
 		n = recv(sockfd, buffer, 512, 0);
 		if (n < 0) error("ERROR recv() failed");
         
 		printf("\n%s\n", buffer);
-	}
+	} while(n > 0);
 
 	return NULL;
 }

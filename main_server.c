@@ -19,24 +19,27 @@ void error(const char *msg)
 typedef struct _USR {
 	int clisockfd;		// socket file descriptor
     char* ipaddr;       //ip address
+    int color;
 	struct _USR* next;	// for linked list queue
 } USR;
 
 USR *head = NULL;
 USR *tail = NULL;
 
-void add_tail(int newclisockfd, char* addr)
+void add_tail(int newclisockfd, char* addr, int color)
 {
 	if (head == NULL) {
 		head = (USR*) malloc(sizeof(USR));
 		head->clisockfd = newclisockfd;
         head->ipaddr = addr;
+        head->color = color;
 		head->next = NULL;
 		tail = head;
 	} else {
 		tail->next = (USR*) malloc(sizeof(USR));
 		tail->next->clisockfd = newclisockfd;
         tail->next->ipaddr = addr;
+        tail->next->color = color;
 		tail->next->next = NULL;
 		tail = tail->next;
 	}
@@ -87,7 +90,7 @@ void broadcast(int fromfd, char* message)
 
 			// prepare message
             memset(buffer, 0, 256);
-			sprintf(buffer, "[%s]:%s", inet_ntoa(cliaddr.sin_addr), message);
+			sprintf(buffer, "\x1b[%dm[%s]:%s\x1b[0m", cur->color, cur->ipaddr, message);
 			int nmsg = strlen(buffer);
 
 			// send!
@@ -166,7 +169,7 @@ int main(int argc, char *argv[])
 		if (newsockfd < 0) error("ERROR on accept");
 
 		printf("Connected: %s\n", inet_ntoa(cli_addr.sin_addr));
-		add_tail(newsockfd, inet_ntoa(cli_addr.sin_addr)); // add this new client to the client list
+		add_tail(newsockfd, inet_ntoa(cli_addr.sin_addr), (rand() % 8) + 30); // add this new client to the client list
         printClients();
 
 		// prepare ThreadArgs structure to pass client socket

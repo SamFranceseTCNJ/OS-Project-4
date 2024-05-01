@@ -93,7 +93,8 @@ int main(int argc, char *argv[])
 
     // receive message asking for user name
     char msg[256];
-    recv(sockfd, msg, sizeof(msg), 0);
+    int a = recv(sockfd, msg, sizeof(msg), 0);
+    if(a < 0) error("ERROR recv() failed");
     printf("%s", msg);
 
     // enter user name
@@ -102,7 +103,8 @@ int main(int argc, char *argv[])
     username[strcspn(username, "\n")] = '\0'; // remove newline character
 
     // send user name to server
-    send(sockfd, username, strlen(username), 0);
+    a = send(sockfd, username, strlen(username), 0);
+    if (a < 0) error("ERROR writing to socket");
 
     pthread_t tid1;
     pthread_t tid2;

@@ -77,10 +77,32 @@ void printClients() {
     }
 }
 
+int getColor(int fd) {
+    USR* cur = head;
+    while(cur != NULL) {
+        if(cur->clisockfd == fd) {
+            return cur->color;
+        }
+        cur = cur->next;
+    }
+    return 0;
+}
+
+void setName(int fd, char* name) {
+    USR* cur = head;
+    while(cur != NULL) {
+        if(cur->clisockfd == fd) {
+            strcpy(cur->username, name);
+        }
+        cur = cur->next;
+    }
+}
+
 void broadcast(int fromfd, char* username, char* message)
 {
     // traverse through all connected clients
     USR* cur = head;
+    int color = getColor(fromfd);
     while (cur != NULL) {
         // check if cur is not the one who sent the message
         if (cur->clisockfd != fromfd) {
@@ -88,7 +110,7 @@ void broadcast(int fromfd, char* username, char* message)
 
             // prepare message
             memset(buffer, 0, 512);
-            sprintf(buffer, "\x1b[%dm[%s]:%s\x1b[0m", cur->color, username, message);
+            sprintf(buffer, "\x1b[%dm[%s]:%s\x1b[0m", color, username, message);
             int nmsg = strlen(buffer);
 
             // send!
@@ -123,6 +145,7 @@ void* thread_main(void* args)
     nrcv = recv(clisockfd, username, 20, 0);
     if (nrcv < 0) error("ERROR recv() failed");
     username[nrcv] = '\0';
+    setName(clisockfd, username);
 
     // we send the user name to everyone
     printf("%s (IP-address-of-%s) joined the chat room!\n", username, username);

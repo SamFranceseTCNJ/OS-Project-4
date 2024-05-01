@@ -162,7 +162,7 @@ void* thread_main(void* args)
         // we send the message to everyone except the sender
         broadcast(clisockfd, username, buffer);
     }
-
+    broadcast(clisockfd, username, " disconnected.");
     if(deleteClient(clisockfd) == 0) {
         printf("could not disconnect that socket\n");
     }

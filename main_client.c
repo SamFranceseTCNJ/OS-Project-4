@@ -9,7 +9,7 @@
 #include <netdb.h> 
 #include <pthread.h>
 
-#define PORT_NUM 1004
+#define PORT_NUM 4444
 
 void error(const char *msg)
 {
@@ -37,7 +37,7 @@ void* thread_main_recv(void* args)
         n = recv(sockfd, buffer, 512, 0);
         if (n < 0) error("ERROR recv() failed");
         
-        printf("\n%s\n", buffer);
+        printf("%s\n", buffer);
     } while(n > 0);
 
     return NULL;
@@ -57,6 +57,7 @@ void* thread_main_send(void* args)
     while (1) {
         // You will need a bit of control on your terminal
         // console or GUI to have a nice input window.
+        printf("Please enter the message: ");
         memset(buffer, 0, 256);
         fgets(buffer, 255, stdin);
 
@@ -73,7 +74,7 @@ void* thread_main_send(void* args)
 
 int main(int argc, char *argv[])
 {
-    if (argc < 2) error("Please specify hostname");
+    if (argc < 3) error("Please specify hostname and room number or 'new' to create a new room");
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) error("ERROR opening socket");
@@ -91,26 +92,32 @@ int main(int argc, char *argv[])
             (struct sockaddr *) &serv_addr, slen);
     if (status < 0) error("ERROR connecting");
 
-    // receive message asking for user name
-    char msg[256];
-    int a = recv(sockfd, msg, sizeof(msg), 0);
-    if(a < 0) error("ERROR recv() failed");
-    printf("%s", msg);
-
-    // enter user name
-    char username[20];
-    fgets(username, sizeof(username), stdin);
-    username[strcspn(username, "\n")] = '\0'; // remove newline character
-
-    // send user name to server
-    a = send(sockfd, username, strlen(username), 0);
-    if (a < 0) error("ERROR writing to socket");
-
     pthread_t tid1;
     pthread_t tid2;
 
     ThreadArgs* args;
-    
+
+    if (strcmp(argv[2], "new") == 0) {
+        send(sockfd, "new", sizeof("new"), 0);
+        char buffer[256];
+        recv(sockfd, buffer, sizeof(buffer), 0);
+        printf("%s", buffer);
+    } else {
+        int room_number = atoi(argv[2]);
+        send(sockfd, argv[2], strlen(argv[2]), 0);
+        char buffer[256];
+        recv(sockfd, buffer, sizeof(buffer), 0);
+        printf("%s", buffer);
+    }
+
+    // send user name to server
+    char username[20];
+    printf("Type your user name: ");
+    fgets(username, 20, stdin);
+    username[strlen(username) - 1] = '\0'; // removing newline character
+
+    send(sockfd, username, strlen(username), 0);
+
     args = (ThreadArgs*) malloc(sizeof(ThreadArgs));
     args->clisockfd = sockfd;
     pthread_create(&tid1, NULL, thread_main_send, (void*) args);
@@ -120,12 +127,13 @@ int main(int argc, char *argv[])
     pthread_create(&tid2, NULL, thread_main_recv, (void*) args);
 
     // parent will wait for sender to finish (= user stop sending message and disconnect from server)
-    pthread_join(tid1, NULL);
+    pthread_join(tid2, NULL);
 
     close(sockfd);
 
     return 0;
 }
+
 
 
 

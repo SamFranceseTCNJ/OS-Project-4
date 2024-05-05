@@ -39,7 +39,7 @@ void* thread_main_recv(void* args)
         
         printf("%s\n", buffer);
     } while(n > 0);
-
+    printf("stopped receiving\n");
     return NULL;
 }
 
@@ -65,7 +65,7 @@ void* thread_main_send(void* args)
 
         n = send(sockfd, buffer, strlen(buffer), 0);
         if (n < 0) error("ERROR writing to socket");
-
+        
         if (n == 0) break; // we stop transmission when user type empty string
     }
 
@@ -115,8 +115,7 @@ int main(int argc, char *argv[])
     printf("Type your user name: ");
     fgets(username, 20, stdin);
     username[strlen(username) - 1] = '\0'; // removing newline character
-
-    send(sockfd, username, strlen(username), 0);
+    send(sockfd, username, sizeof(username), 0);
 
     args = (ThreadArgs*) malloc(sizeof(ThreadArgs));
     args->clisockfd = sockfd;

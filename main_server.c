@@ -145,7 +145,7 @@ void* thread_main(void* args)
 
     // receive user name from client
     char username[20];
-    nrcv = recv(clisockfd, username, 20, 0);
+    nrcv = recv(clisockfd, username, sizeof(username), 0);
     if (nrcv < 0) error("ERROR recv() failed");
     username[nrcv] = '\0';
 
@@ -205,9 +205,9 @@ int main(int argc, char *argv[])
         char buffer[256];
         int n = recv(newsockfd, buffer, 255, 0);
         if (n < 0) error("ERROR recv() failed");
-
+        int room_number;
         if (strncmp(buffer, "new", 3) == 0) {
-            int room_number = -1;
+            room_number = -1;
             for (int i = 0; i < MAX_ROOMS; ++i) {
                 if (rooms[i] == NULL) {
                     room_number = i + 1;
@@ -215,6 +215,7 @@ int main(int argc, char *argv[])
                     rooms[i]->room_number = room_number;
                     rooms[i]->head = NULL;
                     rooms[i]->tail = NULL;
+                    rooms[i]->next = NULL;
                     break;
                 }
             }
@@ -227,7 +228,7 @@ int main(int argc, char *argv[])
             sprintf(buffer, "Connected to %s with new room number %d\nPlease enter the message: ", inet_ntoa(cli_addr.sin_addr), room_number);
             send(newsockfd, buffer, sizeof(buffer), 0);
         } else {
-            int room_number = atoi(buffer);
+            room_number = atoi(buffer);
             Room* room = find_room(room_number);
             if (room == NULL) {
                 send(newsockfd, "Room does not exist!", sizeof("Room does not exist!"), 0);
@@ -244,7 +245,7 @@ int main(int argc, char *argv[])
         if (args == NULL) error("ERROR creating thread argument");
         
         args->clisockfd = newsockfd;
-        args->room_number = atoi(buffer);
+        args->room_number = room_number;
 
         pthread_t tid;
         if (pthread_create(&tid, NULL, thread_main, (void*) args) != 0) error("ERROR creating a new thread");

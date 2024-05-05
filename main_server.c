@@ -155,7 +155,8 @@ void* thread_main(void* args)
     add_tail(room, clisockfd, ip, (rand()%8)+30, username);
     
     // we send the user name to everyone
-    printf("%s (IP-address-of-%s) joined Room %d!\n", username, ip, room_number);
+    printf("%s (%s) joined Room %d!\n", username, ip, room_number);
+    printClients(room);
     broadcast(room, clisockfd, username, "joined the chat room!");
 
     while (1) {

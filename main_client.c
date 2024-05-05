@@ -39,7 +39,7 @@ void* thread_main_recv(void* args)
         
         printf("%s\n", buffer);
     } while(n > 0);
-    printf("stopped receiving\n");
+    
     return NULL;
 }
 

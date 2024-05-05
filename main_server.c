@@ -34,12 +34,12 @@ typedef struct _Room {
 
 Room *rooms[MAX_ROOMS] = {NULL};
 
-Room* find_room(int room_number) {
+int find_room(int room_number) {
     for (int i = 0; i < MAX_ROOMS; ++i) {
         if (rooms[i] != NULL && rooms[i]->room_number == room_number)
-            return rooms[i];
+            return i;
     }
-    return NULL;
+    return -1;
 }
 
 void add_tail(Room* room, int newclisockfd, char* addr, int color, char* username)
@@ -104,7 +104,7 @@ void broadcast(Room* room, int fromfd, char* username, char* message)
             // prepare message
             memset(buffer, 0, 512);
             sprintf(buffer, "\x1b[%dm[Room %d][%s]: %s\x1b[0m", cur->color, room->room_number, username, message);
-            int nmsg = strlen(buffer);
+            int nmsg = sizeof(buffer);
 
             // send!
             int nsen = send(cur->clisockfd, buffer, nmsg, 0);
@@ -118,6 +118,7 @@ void broadcast(Room* room, int fromfd, char* username, char* message)
 typedef struct _ThreadArgs {
     int clisockfd;
     int room_number;
+    char* addr;
 } ThreadArgs;
 
 void* thread_main(void* args)
@@ -129,15 +130,15 @@ void* thread_main(void* args)
     ThreadArgs* targs = (ThreadArgs*) args;
     int clisockfd = targs->clisockfd;
     int room_number = targs->room_number;
+    char* ip = targs->addr;
     free(args);
-
-    Room* room = find_room(room_number);
-    if (room == NULL) {
+ 
+    if (find_room(room_number) == -1) {
         printf("Room %d not found\n", room_number);
         close(clisockfd);
         return NULL;
     }
-
+    
     //-------------------------------
     // Now, we receive/send messages
     char buffer[256];
@@ -149,8 +150,12 @@ void* thread_main(void* args)
     if (nrcv < 0) error("ERROR recv() failed");
     username[nrcv] = '\0';
 
+    //add tail
+    Room* room = rooms[find_room(room_number)];
+    add_tail(room, clisockfd, ip, (rand()%8)+30, username);
+    
     // we send the user name to everyone
-    printf("%s (IP-address-of-%s) joined Room %d!\n", username, username, room_number);
+    printf("%s (IP-address-of-%s) joined Room %d!\n", username, ip, room_number);
     broadcast(room, clisockfd, username, "joined the chat room!");
 
     while (1) {
@@ -229,7 +234,7 @@ int main(int argc, char *argv[])
             send(newsockfd, buffer, sizeof(buffer), 0);
         } else {
             room_number = atoi(buffer);
-            Room* room = find_room(room_number);
+            Room* room = rooms[find_room(room_number)];
             if (room == NULL) {
                 send(newsockfd, "Room does not exist!", sizeof("Room does not exist!"), 0);
                 close(newsockfd);
@@ -246,6 +251,7 @@ int main(int argc, char *argv[])
         
         args->clisockfd = newsockfd;
         args->room_number = room_number;
+        args->addr = inet_ntoa(cli_addr.sin_addr);
 
         pthread_t tid;
         if (pthread_create(&tid, NULL, thread_main, (void*) args) != 0) error("ERROR creating a new thread");

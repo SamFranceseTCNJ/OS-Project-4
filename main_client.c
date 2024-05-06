@@ -9,7 +9,7 @@
 #include <netdb.h> 
 #include <pthread.h>
 
-#define PORT_NUM 4444
+#define PORT_NUM 4000
 
 void error(const char *msg)
 {
@@ -67,6 +67,60 @@ void* thread_main_send(void* args)
         if (n < 0) error("ERROR writing to socket");
         
         if (n == 0) break; // we stop transmission when user type empty string
+
+        // Check if the message is a file transfer request
+        if (strncmp(buffer, "SEND", 4) == 0) {
+            char receiving_username[20];
+            char filename[256];
+
+            // Parsing the SEND command
+            sscanf(buffer, "SEND %s %s", receiving_username, filename);
+
+            // Wait for the receiver's response
+            printf("User %s wants to send you a file named '%s'. Do you accept? (Y/N) ", receiving_username, filename);
+            memset(buffer, 0, 256);
+            fgets(buffer, 255, stdin);
+            if (buffer[0] == 'Y' || buffer[0] == 'y') {
+                // Notify the server to start the file transfer
+                n = send(sockfd, "Y", 1, 0);
+                if (n < 0) error("ERROR writing to socket");
+
+                // Receive the file transfer information from the server
+                memset(buffer, 0, 256);
+                n = recv(sockfd, buffer, 255, 0);
+                if (n < 0) error("ERROR recv() failed");
+
+                // Parse the file transfer information
+                char file_name[256];
+                long file_size;
+                sscanf(buffer, "FILE %s %ld", file_name, &file_size);
+
+                // Open the file to write
+                FILE *file = fopen(file_name, "w");
+                if (file == NULL) {
+                    printf("Error opening file.\n");
+                    continue;
+                }
+
+                // Receive the file data from the server
+                long total_bytes_received = 0;
+                while (total_bytes_received < file_size) {
+                    memset(buffer, 0, 256);
+                    n = recv(sockfd, buffer, 256, 0);
+                    if (n < 0) error("ERROR recv() failed");
+
+                    fwrite(buffer, 1, n, file);
+                    total_bytes_received += n;
+                }
+
+                printf("File '%s' received successfully.\n", file_name);
+                fclose(file);
+            } else {
+                // Notify the server that the receiver rejected the file
+                n = send(sockfd, "N", 1, 0);
+                if (n < 0) error("ERROR writing to socket");
+            }
+        }
     }
 
     return NULL;
@@ -74,7 +128,7 @@ void* thread_main_send(void* args)
 
 int main(int argc, char *argv[])
 {
-    if (argc < 3) error("Please specify hostname and room number or 'new' to create a new room");
+    if (argc < 2) error("Please specify hostname and room number or 'new' to create a new room");
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) error("ERROR opening socket");
@@ -97,17 +151,26 @@ int main(int argc, char *argv[])
 
     ThreadArgs* args;
 
-    if (strcmp(argv[2], "new") == 0) {
-        send(sockfd, "new", sizeof("new"), 0);
-        char buffer[256];
+    if (argc == 2 || (argc > 2 && strncmp(argv[2], "new", 3) != 0)) {
+        // Send a request to get the list of available rooms
+        char buffer[256] = "list";
+        send(sockfd, buffer, sizeof(buffer), 0);
+
+        // Receive and print the list of available rooms
+        memset(buffer, 0, 256);
         recv(sockfd, buffer, sizeof(buffer), 0);
         printf("%s", buffer);
+
+        // Choose a room to join
+        printf("Choose the room number or type [new] to create a new room: ");
+        fgets(buffer, 255, stdin);
+        buffer[strlen(buffer) - 1] = '\0'; // remove newline character
+
+        // Send the chosen room number or new room command to the server
+        send(sockfd, buffer, strlen(buffer), 0);
     } else {
-        int room_number = atoi(argv[2]);
+        // Send the room number or new room command to the server
         send(sockfd, argv[2], strlen(argv[2]), 0);
-        char buffer[256];
-        recv(sockfd, buffer, sizeof(buffer), 0);
-        printf("%s", buffer);
     }
 
     // send user name to server

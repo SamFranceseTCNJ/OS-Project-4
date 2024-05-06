@@ -7,9 +7,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <dirent.h> 
+#include <fcntl.h>  
 
-#define PORT_NUM 4444
+#define PORT_NUM 4000
 #define MAX_ROOMS 3
+#define MAX_CLIENTS 10
 
 void error(const char *msg)
 {
@@ -132,16 +135,16 @@ void* thread_main(void* args)
     int room_number = targs->room_number;
     char* ip = targs->addr;
     free(args);
- 
+
     if (find_room(room_number) == -1) {
         printf("Room %d not found\n", room_number);
         close(clisockfd);
         return NULL;
     }
-    
+
     //-------------------------------
     // Now, we receive/send messages
-    char buffer[256];
+    char buffer[512];
     int nsen, nrcv;
 
     // receive user name from client
@@ -152,8 +155,8 @@ void* thread_main(void* args)
 
     //add tail
     Room* room = rooms[find_room(room_number)];
-    add_tail(room, clisockfd, ip, (rand()%8)+30, username);
-    
+    add_tail(room, clisockfd, ip, (rand() % 8) + 30, username);
+
     // we send the user name to everyone
     printf("%s (%s) joined Room %d!\n", username, ip, room_number);
     printClients(room);
@@ -161,17 +164,73 @@ void* thread_main(void* args)
 
     while (1) {
         // receive message from client
-        memset(buffer, 0, 256);
-        nrcv = recv(clisockfd, buffer, 255, 0);
+        memset(buffer, 0, 512);
+        nrcv = recv(clisockfd, buffer, 511, 0);
         if (nrcv < 0) error("ERROR recv() failed");
 
         if (nrcv == 0) break; // client disconnected
 
-        // we send the message to everyone except the sender
-        broadcast(room, clisockfd, username, buffer);
+        // Check if the message is a file transfer request
+        if (strncmp(buffer, "SEND", 4) == 0) {
+            char receiving_username[20];
+            char filename[256];
+
+            // Parsing the SEND command
+            sscanf(buffer, "SEND %s %s", receiving_username, filename);
+
+            // Ask the receiving client if they accept the file
+            sprintf(buffer, "User %s wants to send you a file named '%s'. Do you accept? (Y/N) ", username, filename);
+            nsen = send(clisockfd, buffer, strlen(buffer), 0);
+            if (nsen != strlen(buffer)) error("ERROR send() failed");
+
+            // Receive response from the receiving client
+            memset(buffer, 0, 512);
+            nrcv = recv(clisockfd, buffer, 511, 0);
+            if (nrcv < 0) error("ERROR recv() failed");
+
+            // If the receiving client accepts, start the file transfer
+            if (buffer[0] == 'Y' || buffer[0] == 'y') {
+                // Open the file to be sent
+                FILE* file = fopen(filename, "r");
+                if (file == NULL) {
+                    printf("Error opening file.\n");
+                    continue;
+                }
+
+                // Get the size of the file
+                fseek(file, 0, SEEK_END);
+                long filesize = ftell(file);
+                rewind(file);
+
+                // Prepare the file transfer message
+                memset(buffer, 0, 512);
+                sprintf(buffer, "FILE %s %ld", filename, filesize);
+                nsen = send(clisockfd, buffer, strlen(buffer), 0);
+                if (nsen != strlen(buffer)) error("ERROR send() failed");
+
+                // Send the file in chunks
+                while (filesize > 0) {
+                    int bytes_to_read = (filesize < 512) ? filesize : 512;
+                    fread(buffer, 1, bytes_to_read, file);
+                    nsen = send(clisockfd, buffer, bytes_to_read, 0);
+                    if (nsen != bytes_to_read) error("ERROR send() failed");
+                    filesize -= bytes_to_read;
+                }
+
+                fclose(file);
+
+                // Notify the sender that the file has been sent
+                sprintf(buffer, "File '%s' has been sent to %s.", filename, receiving_username);
+                nsen = send(clisockfd, buffer, strlen(buffer), 0);
+                if (nsen != strlen(buffer)) error("ERROR send() failed");
+            }
+        } else {
+            // we send the message to everyone except the sender
+            broadcast(room, clisockfd, username, buffer);
+        }
     }
 
-    if(deleteClient(room, clisockfd) == 0) {
+    if (deleteClient(room, clisockfd) == 0) {
         printf("could not disconnect that socket\n");
     }
     printClients(room);
@@ -180,6 +239,9 @@ void* thread_main(void* args)
 
     return NULL;
 }
+
+
+
 
 int main(int argc, char *argv[])
 {
@@ -233,6 +295,27 @@ int main(int argc, char *argv[])
             printf("New room created: %d\n", room_number);
             sprintf(buffer, "Connected to %s with new room number %d\nPlease enter the message: ", inet_ntoa(cli_addr.sin_addr), room_number);
             send(newsockfd, buffer, sizeof(buffer), 0);
+        } else if (strncmp(buffer, "list", 4) == 0) {
+            // Send the list of available rooms
+            memset(buffer, 0, 256);
+            sprintf(buffer, "Server says following options are available:\n");
+            for (int i = 0; i < MAX_ROOMS; ++i) {
+                if (rooms[i] == NULL) {
+                    sprintf(buffer + strlen(buffer), "Room %d: 0 people\n", i + 1);
+                } else {
+                    int count = 0;
+                    USR *cur = rooms[i]->head;
+                    while (cur != NULL) {
+                        count++;
+                        cur = cur->next;
+                    }
+                    sprintf(buffer + strlen(buffer), "Room %d: %d people\n", rooms[i]->room_number, count);
+                }
+            }
+            sprintf(buffer + strlen(buffer), "Choose the room number or type [new] to create a new room: ");
+            send(newsockfd, buffer, sizeof(buffer), 0);
+            close(newsockfd);
+            continue;
         } else {
             room_number = atoi(buffer);
             Room* room = rooms[find_room(room_number)];
